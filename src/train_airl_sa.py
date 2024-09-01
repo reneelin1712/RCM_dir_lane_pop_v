@@ -48,6 +48,7 @@ def update_params_airl(batch, i_iter):
         indices = torch.from_numpy(np.random.choice(expert_st.shape[0],
                                                     min(states.shape[0], expert_st.shape[0]),
                                                     replace=False)).long()
+        # print('indices', indices.shape)
         s_expert_st = expert_st[indices].to(device)
         s_expert_des = expert_des[indices].to(device)
         s_expert_ac = expert_ac[indices].to(device)
@@ -56,21 +57,18 @@ def update_params_airl(batch, i_iter):
 
         with torch.no_grad():
             expert_log_probs = policy_net.get_log_prob(s_expert_st, s_expert_des, s_expert_ac, s_expert_time_step)
-
-        # Update the discriminator without considering actions
-        g_o = discrim_net(states, destinations, fixed_log_probs, next_states, time_steps)  # **Change: Removed actions**
-        e_o = discrim_net(s_expert_st, s_expert_des, expert_log_probs, s_expert_next_st, s_expert_time_step)  # **Change: Removed actions**
+        # states, des, log_pis, next_states
+        g_o = discrim_net(states, destinations, actions, fixed_log_probs, next_states, time_steps)
+        e_o = discrim_net(s_expert_st, s_expert_des, s_expert_ac, expert_log_probs, s_expert_next_st, s_expert_time_step)
         loss_pi = -F.logsigmoid(-g_o).mean()
         loss_exp = -F.logsigmoid(e_o).mean()
         discrim_loss = loss_pi + loss_exp
         optimizer_discrim.zero_grad()
         discrim_loss.backward()
         optimizer_discrim.step()
-
     """get advantage estimation from the trajectories"""
-    rewards = discrim_net.calculate_reward(states, destinations, fixed_log_probs, next_states, time_steps).squeeze()  # **Change: Removed actions**
+    rewards = discrim_net.calculate_reward(states, destinations, actions, fixed_log_probs, next_states, time_steps).squeeze()
     advantages, returns = estimate_advantages(rewards, masks, bad_masks, values, next_values, gamma, tau, device)
-
     """perform mini-batch PPO update"""
     value_loss, policy_loss = 0, 0
     optim_iter_num = int(math.ceil(states.shape[0] / optim_batch_size))
@@ -211,7 +209,7 @@ if __name__ == '__main__':
     path_feature_p = "../data/direction/feature_od_direction.npy"
     train_p = "../data/base/cross_validation/train_CV%d_size%d.csv" % (cv, size)
     test_p = "../data/base/cross_validation/test_CV%d.csv" % cv
-    model_p = "../trained_models/airl_CV%d_size%d.pt" % (cv, size)
+    model_p = "../trained_models/state_reward/airl_CV%d_size%d.pt" % (cv, size)
 
 
     """inialize road environment"""
@@ -249,6 +247,8 @@ if __name__ == '__main__':
     optimizer_value = torch.optim.Adam(value_net.parameters(), lr=learning_rate)
     optimizer_discrim = torch.optim.Adam(discrim_net.parameters(), lr=learning_rate)
     """load expert trajectory"""
+    # expert_st, expert_des, expert_ac, expert_next_st = env.import_demonstrations(train_p)
+    # to_device(device, expert_st, expert_des, expert_ac, expert_next_st)
     expert_st, expert_des, expert_ac, expert_next_st, expert_time_step = env.import_demonstrations(train_p)
     to_device(device, expert_st, expert_des, expert_ac, expert_next_st, expert_time_step)
     print('done load expert data... num of episode: %d' % len(expert_st))

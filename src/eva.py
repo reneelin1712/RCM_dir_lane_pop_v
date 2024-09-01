@@ -39,7 +39,7 @@ def evaluate_only():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Path settings
-    model_path = "../trained_models/airl_CV0_size10000.pt"  
+    model_path = "../trained_models/state_reward/airl_CV0_size10000.pt"  
     test_p = "../data/cross_validation/test_CV0.csv"  # Adjust path and CV index as necessary
     edge_p = "../data/base/edge.txt"
     network_p = "../data/base/transit.npy"
